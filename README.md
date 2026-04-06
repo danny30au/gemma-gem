@@ -5,7 +5,7 @@ Your personal AI assistant living right inside the browser. Gemma Gem runs Googl
 ## Requirements
 
 - Chrome with WebGPU support
-- ~500MB disk for model download (cached after first run)
+- ~500MB disk for E2B model, ~1.5GB for E4B (cached after first run)
 
 ## Setup
 
@@ -52,7 +52,8 @@ Offscreen Document          Service Worker           Content Script
 
 Click the gear icon in the chat header:
 
-- **Thinking**: Toggle native Gemma 4 chain-of-thought reasoning
+- **Model**: Switch between Gemma 4 E2B (~500MB) and E4B (~1.5GB). Selection persists across sessions.
+- **Thinking**: Toggle native Gemma 4 thinking
 - **Max iterations**: Cap on tool call loops per request
 - **Clear context**: Reset conversation history for the current page
 - **Disable on this site**: Disable the extension per-hostname (persisted)
@@ -69,7 +70,7 @@ pnpm build:prod         # Production build (logging silenced, minified)
 - [WXT](https://wxt.dev) — Chrome extension framework (Vite-based)
 - [@huggingface/transformers](https://github.com/huggingface/transformers.js) — Browser ML inference
 - [marked](https://github.com/markedjs/marked) — Markdown rendering in chat
-- Gemma 4 E2B (`onnx-community/gemma-4-E2B-it-ONNX`) — q4f16 quantization, 128K context
+- Gemma 4 E2B / E4B (`onnx-community/gemma-4-E2B-it-ONNX`, `onnx-community/gemma-4-E4B-it-ONNX`) — q4f16 quantization, 128K context
 
 ## Debugging
 
@@ -87,4 +88,5 @@ The offscreen document logs are the most useful — they show model loading, pro
 The `agent/` directory has zero dependencies. It defines interfaces (`ModelBackend`, `ToolExecutor`) and can be extracted to a standalone library.
 
 ![Gemma Gem in action](screenshot.png)
+![Gemma Gem in action](screenshot2.jpg)
 

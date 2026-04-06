@@ -1,4 +1,5 @@
 import type { ToolCall, ToolResponse } from '../agent/types'
+import type { ModelId } from './models'
 
 // Content Script -> Service Worker
 export type ChatSettings = {
@@ -56,8 +57,14 @@ export type AgentToolCallMessage = {
 export type ModelStatusMessage = {
   type: 'model:status'
   status: 'loading' | 'ready' | 'error'
+  modelId?: ModelId
   progress?: number
   error?: string
+}
+
+export type ModelSwitchMessage = {
+  type: 'model:switch'
+  modelId: ModelId
 }
 
 // Service Worker -> Offscreen Document
@@ -70,6 +77,7 @@ export type AgentRunMessage = {
 
 export type ModelLoadMessage = {
   type: 'model:load'
+  modelId?: ModelId
 }
 
 // Offscreen Document -> Service Worker
@@ -95,6 +103,7 @@ export type OffscreenAgentChunkMessage = {
 export type OffscreenModelStatusMessage = {
   type: 'model:status'
   status: 'loading' | 'ready' | 'error'
+  modelId?: ModelId
   progress?: number
   error?: string
 }
@@ -110,6 +119,7 @@ export type Message =
   | AgentThinkingMessage
   | AgentToolCallMessage
   | ModelStatusMessage
+  | ModelSwitchMessage
   | AgentRunMessage
   | ModelLoadMessage
   | OffscreenToolExecuteMessage

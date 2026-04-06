@@ -7,6 +7,7 @@ import {
 } from '@huggingface/transformers'
 import type { ModelBackend, GenerateOptions } from '@/agent/types'
 import { log } from '@/shared/logger'
+import { MODELS, DEFAULT_MODEL_ID, type ModelId } from '@/shared/models'
 
 const SPECIAL_TOKENS = new Set([
   '<eos>', '<bos>', '<end_of_turn>', '<start_of_turn>',
@@ -32,32 +33,45 @@ function stripSpecialTokens(text: string): string {
 // Configure ONNX Runtime to load backend files locally instead of from CDN
 env.backends.onnx.wasm.wasmPaths = chrome.runtime.getURL('ort/')
 
-const MODEL_ID = 'onnx-community/gemma-4-E2B-it-ONNX'
-
 type StatusCallback = (status: 'loading' | 'ready' | 'error', progress?: number, error?: string) => void
 
 export class GemmaModelHost implements ModelBackend {
   private model: InstanceType<typeof Gemma4ForConditionalGeneration> | null = null
   private processor: Awaited<ReturnType<typeof AutoProcessor.from_pretrained>> | null = null
   private loading = false
+  private currentModelId: ModelId | null = null
+  private loadingModelId: ModelId | null = null
   private onStatus: StatusCallback
 
   constructor(onStatus: StatusCallback) {
     this.onStatus = onStatus
   }
 
-  async load(): Promise<void> {
-    if (this.model) {
+  async load(modelId: ModelId = DEFAULT_MODEL_ID): Promise<void> {
+    log.info('load() called:', modelId, '| current:', this.currentModelId, '| hasModel:', !!this.model, '| loading:', this.loading)
+    if (this.model && this.currentModelId === modelId) {
       this.onStatus('ready')
       return
     }
-    if (this.loading) return
+    if (this.model && this.currentModelId !== modelId) {
+      log.info('Unloading current model before switching')
+      await this.unload()
+      log.info('Unload complete')
+    }
+    if (this.loading) {
+      log.warn('load() blocked by loading guard — another load is in progress')
+      return
+    }
     this.loading = true
+    this.loadingModelId = modelId
 
+    const config = MODELS[modelId]
+    log.info('Starting from_pretrained for:', config.hfModelId)
     const fileProgress = new Map<string, number>()
     let lastReportedProgress = -1
 
     const progress_callback = (info: { status: string, file?: string, progress?: number }) => {
+      log.debug('progress_callback:', info.status, info.file ?? '', info.progress ?? '')
       if (info.status === 'progress' && info.file != null) {
         fileProgress.set(info.file, info.progress ?? 0)
         const values = [...fileProgress.values()]
@@ -75,23 +89,44 @@ export class GemmaModelHost implements ModelBackend {
 
     try {
       const [model, processor] = await Promise.all([
-        Gemma4ForConditionalGeneration.from_pretrained(MODEL_ID, {
+        Gemma4ForConditionalGeneration.from_pretrained(config.hfModelId, {
           dtype: 'q4f16',
           device: 'webgpu',
           progress_callback,
         }),
-        AutoProcessor.from_pretrained(MODEL_ID),
+        AutoProcessor.from_pretrained(config.hfModelId),
       ])
 
       this.model = model as InstanceType<typeof Gemma4ForConditionalGeneration>
       this.processor = processor
+      this.currentModelId = modelId
+      this.loadingModelId = null
+      this.contextLimit = config.contextLimit
       this.loading = false
       this.onStatus('ready')
     } catch (e) {
       this.loading = false
+      this.loadingModelId = null
       this.onStatus('error', undefined, String(e))
       throw e
     }
+  }
+
+  async unload(): Promise<void> {
+    log.info('unload() called, hasModel:', !!this.model)
+    if (this.model) {
+      log.info('Disposing model...')
+      await this.model.dispose()
+      log.info('Model disposed')
+      this.model = null
+    }
+    this.processor = null
+    this.currentModelId = null
+    this.loading = false
+  }
+
+  getCurrentModelId(): ModelId | null {
+    return this.currentModelId ?? this.loadingModelId
   }
 
   async generate(prompt: string, options?: GenerateOptions): Promise<string> {

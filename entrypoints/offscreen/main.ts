@@ -4,6 +4,7 @@ import { TOOL_DEFINITIONS } from '@/shared/tool-definitions'
 import { AgentLoop } from '@/agent/agent-loop'
 import { GemmaModelHost } from '@/offscreen/model-host'
 import { log } from '@/shared/logger'
+import { DEFAULT_MODEL_ID, type ModelId } from '@/shared/models'
 
 function getCountry(): string {
   const locale = navigator.language || 'en-US'
@@ -67,6 +68,7 @@ const modelHost = new GemmaModelHost((status, progress, error) => {
   chrome.runtime.sendMessage({
     type: 'model:status',
     status,
+    modelId: modelHost.getCurrentModelId() ?? undefined,
     progress,
     error,
   } satisfies Message)
@@ -104,16 +106,27 @@ function createToolExecutor(tabId: number) {
 let currentAgent: AgentLoop | null = null
 let currentTabId: number | null = null
 
-// Auto-load model immediately — avoids race condition where model:load
-// message arrives before this listener is registered
-log.info('Auto-loading model')
-modelHost.load().catch(e => log.error('Model load failed:', e))
+// Model loading is initiated by the background via model:load message
+// (offscreen documents don't have access to chrome.storage)
 
 chrome.runtime.onMessage.addListener((message: Message) => {
   switch (message.type) {
     case 'model:load': {
-      // Idempotent — load() guards against double-load
-      modelHost.load().catch(e => log.error('Model load failed:', e))
+      const modelId = message.modelId ?? modelHost.getCurrentModelId() ?? DEFAULT_MODEL_ID
+      modelHost.load(modelId).catch(e => log.error('Model load failed:', e))
+      break
+    }
+
+    case 'model:switch': {
+      const { modelId } = message
+      log.info('Switching model to:', modelId)
+      if (currentAgent) {
+        currentAgent.clearHistory()
+      }
+      currentAgent = null
+      currentTabId = null
+      // Storage persistence is handled by the background service worker
+      modelHost.load(modelId).catch(e => log.error('Model switch failed:', e))
       break
     }
 

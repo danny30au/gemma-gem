@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0 (2026-04-06)
+
+### Features
+
+- Model selection: switch between Gemma 4 E2B (~500MB) and E4B (~1.5GB) from the settings panel
+- Model selection persists across sessions via chrome.storage.local
+- Model switching with proper GPU resource disposal and reload
+- Incremental markdown rendering during streaming (on each newline)
+- Model-specific download progress messages
+
 ## 0.1.0 (2026-04-05)
 
 Initial release.

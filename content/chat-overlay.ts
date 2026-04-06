@@ -1,4 +1,5 @@
 import { marked } from 'marked'
+import { MODELS, DEFAULT_MODEL_ID, type ModelId } from '@/shared/models'
 
 marked.setOptions({ breaks: true })
 
@@ -110,6 +111,12 @@ const STYLES = `
     border-radius: 4px; padding: 3px 6px; color: #e2e8f0; font-size: 12px; text-align: center; outline: none;
   }
   .setting-number:focus { border-color: rgba(139, 92, 246, 0.5); }
+  .setting-select {
+    background: rgba(30, 30, 50, 0.6); border: 1px solid rgba(139, 92, 246, 0.2);
+    border-radius: 4px; padding: 3px 6px; color: #e2e8f0; font-size: 12px; outline: none; cursor: pointer;
+  }
+  .setting-select:focus { border-color: rgba(139, 92, 246, 0.5); }
+  .setting-select:disabled { opacity: 0.4; cursor: not-allowed; }
   .setting-disable {
     background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3);
     border-radius: 6px; padding: 6px 12px; color: #f87171; cursor: pointer;
@@ -237,6 +244,7 @@ export interface ChatOverlayCallbacks {
   onSettingsChange: (settings: ChatSettings) => void
   onClearContext: () => void
   onDisableSite: () => void
+  onModelSwitch: (modelId: ModelId) => void
 }
 
 export class ChatOverlay {
@@ -250,6 +258,8 @@ export class ChatOverlay {
   private settingsPanel: HTMLElement
   private thinkingTag: HTMLElement
   private iterationsTag: HTMLElement
+  private modelTag: HTMLElement
+  private modelSelect: HTMLSelectElement
   private typingEl: HTMLElement | null = null
   private streamEl: HTMLElement | null = null
   private streamText = ''
@@ -306,9 +316,18 @@ export class ChatOverlay {
     // Settings panel
     this.settingsPanel = document.createElement('div')
     this.settingsPanel.className = 'settings-panel'
+
+    const modelOptions = Object.values(MODELS).map(m =>
+      `<option value="${m.id}">${m.label} (${m.downloadSize})</option>`
+    ).join('')
+
     this.settingsPanel.innerHTML = `
       <div class="setting-row">
-        <span class="setting-label">Thinking / Reasoning</span>
+        <span class="setting-label">Model</span>
+        <select class="setting-select" data-setting="modelId">${modelOptions}</select>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Thinking</span>
         <label class="setting-toggle">
           <input type="checkbox" data-setting="thinking" ${this.settings.thinking ? 'checked' : ''}>
           <span class="slider"></span>
@@ -319,6 +338,7 @@ export class ChatOverlay {
         <input type="number" class="setting-number" data-setting="maxIterations" value="${this.settings.maxIterations}" min="1" max="50">
       </div>
     `
+    this.modelSelect = this.settingsPanel.querySelector('[data-setting="modelId"]') as HTMLSelectElement
     const disableBtn = document.createElement('button')
     disableBtn.className = 'setting-disable'
     disableBtn.textContent = 'Disable on this site'
@@ -327,7 +347,12 @@ export class ChatOverlay {
 
     this.settingsPanel.addEventListener('change', (e) => {
       const target = e.target as HTMLInputElement
-      const key = target.dataset.setting as keyof ChatSettings
+      const key = target.dataset.setting
+      if (key === 'modelId') {
+        const newModelId = target.value as ModelId
+        callbacks.onModelSwitch(newModelId)
+        return
+      }
       if (key === 'thinking') {
         this.settings.thinking = target.checked
       } else if (key === 'maxIterations') {
@@ -342,12 +367,16 @@ export class ChatOverlay {
     statusBar.className = 'chat-statusbar'
     const tags = document.createElement('div')
     tags.className = 'statusbar-tags'
+    this.modelTag = document.createElement('span')
+    this.modelTag.className = 'statusbar-tag active'
+    this.modelTag.textContent = MODELS[DEFAULT_MODEL_ID].label
     this.thinkingTag = document.createElement('span')
     this.thinkingTag.className = 'statusbar-tag active'
     this.thinkingTag.textContent = '\u{1F9E0} Thinking'
     this.iterationsTag = document.createElement('span')
     this.iterationsTag.className = 'statusbar-tag active'
     this.iterationsTag.textContent = `\u{1F504} ${this.settings.maxIterations} iters`
+    tags.appendChild(this.modelTag)
     tags.appendChild(this.thinkingTag)
     tags.appendChild(this.iterationsTag)
     const clearBtn = document.createElement('button')
@@ -435,7 +464,18 @@ export class ChatOverlay {
       }
     }
 
-    this.streamEl.textContent = this.streamText
+    const lastNewline = this.streamText.lastIndexOf('\n')
+    if (lastNewline === -1) {
+      this.streamEl.textContent = this.streamText
+    } else {
+      const rendered = this.streamText.slice(0, lastNewline + 1)
+      const pending = this.streamText.slice(lastNewline + 1)
+      this.streamEl.innerHTML = marked.parse(rendered) as string
+      if (pending) {
+        this.streamEl.appendChild(document.createTextNode(pending))
+      }
+    }
+
     this.messagesEl.scrollTop = this.messagesEl.scrollHeight
   }
 
@@ -543,6 +583,23 @@ export class ChatOverlay {
       this.typingEl.remove()
       this.typingEl = null
     }
+  }
+
+  clearMessages(): void {
+    this.messagesEl.innerHTML = ''
+    this.streamEl = null
+    this.streamText = ''
+    this.thinkingStreamEl = null
+    this.thinkingStreamText = ''
+  }
+
+  setModelSwitchEnabled(enabled: boolean): void {
+    this.modelSelect.disabled = !enabled
+  }
+
+  setSelectedModel(modelId: ModelId): void {
+    this.modelSelect.value = modelId
+    this.modelTag.textContent = MODELS[modelId].label
   }
 
   updateStatus(status: string): void {

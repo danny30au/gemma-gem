@@ -1,6 +1,7 @@
 import type { Message } from '@/shared/messages'
 import { ensureOffscreenDocument } from './offscreen-manager'
 import { log } from '@/shared/logger'
+import { STORAGE_KEY_MODEL, DEFAULT_MODEL_ID, type ModelId } from '@/shared/models'
 
 function sendToRuntime(message: Message): void {
   chrome.runtime.sendMessage(message).catch(() => {})
@@ -32,7 +33,9 @@ async function handleMessage(message: Message, sender: chrome.runtime.MessageSen
     case 'chat:open': {
       log.debug('chat:open — ensuring offscreen document')
       await ensureOffscreenDocument()
-      sendToRuntime({ type: 'model:load' })
+      const data = await chrome.storage.local.get(STORAGE_KEY_MODEL)
+      const modelId: ModelId = data[STORAGE_KEY_MODEL] ?? DEFAULT_MODEL_ID
+      sendToRuntime({ type: 'model:load', modelId })
       return
     }
 
@@ -44,6 +47,14 @@ async function handleMessage(message: Message, sender: chrome.runtime.MessageSen
 
     case 'context:clear': {
       log.debug('context:clear')
+      sendToRuntime(message)
+      return
+    }
+
+    case 'model:switch': {
+      log.debug('model:switch', message.modelId)
+      await chrome.storage.local.set({ [STORAGE_KEY_MODEL]: message.modelId })
+      await ensureOffscreenDocument()
       sendToRuntime(message)
       return
     }

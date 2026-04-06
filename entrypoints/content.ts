@@ -4,6 +4,7 @@ import type { ChatSettings } from '@/content/chat-overlay'
 import { executeContentTool } from '@/content/tool-executors'
 import type { Message } from '@/shared/messages'
 import type { ToolCall } from '@/agent/types'
+import { MODELS, STORAGE_KEY_MODEL, DEFAULT_MODEL_ID, type ModelId } from '@/shared/models'
 
 const STORAGE_KEY = 'gemma_disabled_sites'
 
@@ -37,6 +38,9 @@ export default defineContentScript({
   async main() {
     let siteDisabled = await isDisabledForSite()
 
+    const modelData = await browser.storage.local.get(STORAGE_KEY_MODEL)
+    const initialModelId: ModelId = modelData[STORAGE_KEY_MODEL] ?? DEFAULT_MODEL_ID
+
     function safeSend(message: Message): void {
       try {
         browser.runtime.sendMessage(message).catch(() => {
@@ -50,6 +54,7 @@ export default defineContentScript({
     const chat = new ChatOverlay({
       onSend(text) {
         chat.setInputEnabled(false)
+        chat.setModelSwitchEnabled(false)
         chat.showTyping()
         safeSend({ type: 'chat:send', text, settings: chat.settings } as any)
       },
@@ -65,7 +70,17 @@ export default defineContentScript({
         chat.hide()
         setGemDisabled(true)
       },
+      onModelSwitch(modelId: ModelId) {
+        chat.setInputEnabled(false)
+        chat.setModelSwitchEnabled(false)
+        chat.addMessage(`Switching to ${MODELS[modelId].label}...`, 'agent')
+        modelReady = false
+        shownLoadingMessage = false
+        safeSend({ type: 'model:switch', modelId })
+      },
     })
+
+    chat.setSelectedModel(initialModelId)
 
     let modelReady = false
     let shownLoadingMessage = false
@@ -96,6 +111,7 @@ export default defineContentScript({
           chat.finalizeThinkingStream()
           chat.finalizeStream(message.text)
           chat.setInputEnabled(true)
+          chat.setModelSwitchEnabled(true)
           break
 
         case 'agent:chunk':
@@ -120,14 +136,20 @@ export default defineContentScript({
             updateGemProgress(pct)
             chat.updateStatus(`Loading model... ${pct}%`)
             chat.setInputEnabled(false)
+            chat.setModelSwitchEnabled(false)
             if (!shownLoadingMessage) {
               shownLoadingMessage = true
-              chat.addMessage('Downloading model... This may take a moment on first run (~500MB, cached after).', 'agent')
+              const modelConfig = MODELS[message.modelId ?? initialModelId]
+              chat.addMessage(`Downloading ${modelConfig.label}... This may take a moment on first run (${modelConfig.downloadSize}, cached after).`, 'agent')
             }
           } else if (message.status === 'ready') {
             updateGemProgress(-1)
             chat.updateStatus('Ready')
             chat.setInputEnabled(true)
+            chat.setModelSwitchEnabled(true)
+            if (message.modelId) {
+              chat.setSelectedModel(message.modelId)
+            }
             if (!modelReady) {
               modelReady = true
               chat.addMessage('Model loaded. How can I help with this page?', 'agent')
@@ -135,6 +157,7 @@ export default defineContentScript({
           } else if (message.status === 'error') {
             updateGemProgress(-1)
             chat.updateStatus(`Error: ${message.error}`)
+            chat.setModelSwitchEnabled(true)
           }
           break
       }
