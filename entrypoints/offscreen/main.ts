@@ -97,7 +97,7 @@ const modelHost = new GemmaModelHost((status, progress, error) => {
 const pendingToolResults = new Map<string, { resolve: (result: unknown) => void, timeoutId: number }>()
 let requestIdCounter = 0
 
-const TOOL_EXECUTION_TIMEOUT = 30000 // 30 seconds
+const TOOL_EXECUTION_TIMEOUT = 120000 // 2 minutes
 
 function createToolExecutor(tabId: number) {
   return {
