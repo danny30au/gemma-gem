@@ -508,6 +508,7 @@ export class ChatOverlay {
   }
 
   finalizeStream(fullText: string): void {
+    this.hideTyping()
     if (!this.streamEl) {
       if (fullText) this.addMessage(fullText, 'agent')
       return
