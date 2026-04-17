@@ -3,7 +3,7 @@ import { ChatOverlay } from '@/content/chat-overlay'
 import type { ChatSettings } from '@/content/chat-overlay'
 import { executeContentTool } from '@/content/tool-executors'
 import type { Message } from '@/shared/messages'
-import type { ToolCall } from '@/agent/types'
+import type { ToolCall } from '@kessler/gemma-agent'
 import { MODELS, STORAGE_KEY_MODEL, DEFAULT_MODEL_ID, type ModelId } from '@/shared/models'
 
 const STORAGE_KEY = 'gemma_disabled_sites'

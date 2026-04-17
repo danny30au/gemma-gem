@@ -1,4 +1,4 @@
-import type { ToolCall, ToolResponse } from '../agent/types'
+import type { ToolCall } from '@kessler/gemma-agent'
 import type { ModelId } from './models'
 
 // Content Script -> Service Worker

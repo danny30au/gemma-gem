@@ -1,6 +1,6 @@
-import type { ToolDefinition } from '../agent/types'
+import type { ToolDefinition } from '@kessler/gemma-agent'
 
-export const TOOL_DEFINITIONS: ToolDefinition[] = [
+export const TOOL_DEFINITIONS: Omit<ToolDefinition, 'execute'>[] = [
   {
     name: 'read_page_content',
     description: 'Read the text or HTML content of the current page or a specific element',

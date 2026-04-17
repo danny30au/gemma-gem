@@ -1,4 +1,4 @@
-import type { ToolCall, ToolResponse } from '../agent/types'
+import type { ToolCall, ToolResponse } from '@kessler/gemma-agent'
 
 const MAX_CONTENT_LENGTH = 64000
 

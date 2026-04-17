@@ -1,7 +1,7 @@
 import type { Message } from '@/shared/messages'
-import type { ToolCall, ToolResponse } from '@/agent/types'
+import { Agent } from '@kessler/gemma-agent'
+import type { ToolDefinition } from '@kessler/gemma-agent'
 import { TOOL_DEFINITIONS } from '@/shared/tool-definitions'
-import { AgentLoop } from '@/agent/agent-loop'
 import { GemmaModelHost } from '@/offscreen/model-host'
 import { log } from '@/shared/logger'
 import { DEFAULT_MODEL_ID, type ModelId } from '@/shared/models'
@@ -99,17 +99,17 @@ let requestIdCounter = 0
 
 const TOOL_EXECUTION_TIMEOUT = 120000 // 2 minutes
 
-function createToolExecutor(tabId: number) {
-  return {
-    async execute(call: ToolCall): Promise<ToolResponse> {
+function createTools(tabId: number): ToolDefinition[] {
+  return TOOL_DEFINITIONS.map(def => ({
+    ...def,
+    async execute(args: Record<string, unknown>): Promise<Record<string, unknown>> {
       const requestId = `tool_${++requestIdCounter}`
-      log.info('Executing tool:', call.name, JSON.stringify(call.arguments))
+      log.info('Executing tool:', def.name, JSON.stringify(args))
 
       const resultPromise = new Promise<unknown>((resolve, reject) => {
-        // Set up timeout to prevent hanging forever
         const timeoutId = window.setTimeout(() => {
           pendingToolResults.delete(requestId)
-          reject(new Error(`Tool ${call.name} execution timed out after ${TOOL_EXECUTION_TIMEOUT}ms`))
+          reject(new Error(`Tool ${def.name} execution timed out after ${TOOL_EXECUTION_TIMEOUT}ms`))
         }, TOOL_EXECUTION_TIMEOUT)
 
         pendingToolResults.set(requestId, { resolve, timeoutId })
@@ -119,19 +119,19 @@ function createToolExecutor(tabId: number) {
         type: 'tool:execute',
         tabId,
         requestId,
-        call,
+        call: { name: def.name, arguments: args },
       } satisfies Message)
 
       try {
         const result = await resultPromise
-        log.debug('Tool result:', call.name, JSON.stringify(result).slice(0, 200))
-        return { name: call.name, result }
+        log.debug('Tool result:', def.name, JSON.stringify(result).slice(0, 200))
+        return result as Record<string, unknown>
       } catch (e) {
-        log.error('Tool execution failed:', call.name, e)
-        return { name: call.name, result: { error: e instanceof Error ? e.message : String(e) } }
+        log.error('Tool execution failed:', def.name, e)
+        return { error: e instanceof Error ? e.message : String(e) }
       }
     },
-  }
+  }))
 }
 
 async function checkGPUCompatibility(): Promise<string | null> {
@@ -145,8 +145,8 @@ async function checkGPUCompatibility(): Promise<string | null> {
   return null
 }
 
-// Agent loop instance per tab
-let currentAgent: AgentLoop | null = null
+// Agent instance per tab
+let currentAgent: Agent | null = null
 let currentTabId: number | null = null
 
 // Model loading is initiated by the background via model:load message
@@ -193,7 +193,7 @@ chrome.runtime.onMessage.addListener(async (message: Message) => {
       log.info('Settings updated:', settings)
       if (currentAgent) {
         currentAgent.updateOptions({
-          enableThinking: settings.thinking,
+          thinking: settings.thinking,
           maxIterations: settings.maxIterations,
         })
       }
@@ -234,14 +234,14 @@ chrome.runtime.onMessage.addListener(async (message: Message) => {
       const maxIterations = settings?.maxIterations ?? 10
 
       if (currentTabId !== tabId || !currentAgent) {
-        log.info('Creating new agent loop for tab', tabId)
-        currentAgent = new AgentLoop({
+        log.info('Creating new agent for tab', tabId)
+        currentAgent = new Agent({
           model: modelHost,
-          tools: TOOL_DEFINITIONS,
-          executor: createToolExecutor(tabId),
+          tools: createTools(tabId),
           systemPrompt: buildSystemPrompt(pageContext),
           maxIterations,
-          enableThinking,
+          thinking: enableThinking,
+          logger: log,
           onThinkingChunk(text) {
             chrome.runtime.sendMessage({
               type: 'agent:chunk',

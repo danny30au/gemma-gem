@@ -2,7 +2,7 @@
   "name": "gemma-gem",
   "description": "Browser AI agent powered by Gemma 4 via WebGPU",
   "license": "Apache-2.0",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",
@@ -20,7 +20,8 @@
     "wxt": "^0.20.20"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.0.1",
+    "@huggingface/transformers": "^4.1.0",
+    "@kessler/gemma-agent": "^1.0.0",
     "marked": "^17.0.5"
   }
 }

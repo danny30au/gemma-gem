@@ -5,7 +5,7 @@ import {
   load_image,
   env,
 } from '@huggingface/transformers'
-import type { ModelBackend, GenerateOptions } from '@/agent/types'
+import type { ModelBackend, GenerateOptions } from '@kessler/gemma-agent'
 import { log } from '@/shared/logger'
 import { MODELS, DEFAULT_MODEL_ID, type ModelId } from '@/shared/models'
 
@@ -137,7 +137,7 @@ export class GemmaModelHost implements ModelBackend {
     }
   }
 
-  async generate(prompt: string, options?: GenerateOptions): Promise<string> {
+  async generateRaw(prompt: string, options?: GenerateOptions): Promise<string> {
     if (!this.model || !this.processor) {
       throw new Error('Model not loaded')
     }
